@@ -3,6 +3,7 @@ from pathlib import Path
 
 import streamlit as st
 from PIL import Image
+import streamlit.components.v1 as components
 
 # ------------------------------------------------------------
 # 1) 확률/로직 (기존 메커니즘 유지)
@@ -34,21 +35,18 @@ def choose_slots(prob_dict):
     return random.choices(slots, weights=probs, k=1)[0]
 
 # ------------------------------------------------------------
-# 2) UI/CSS (스케일 다운 + SR+ 표시)
+# 2) CSS / HTML 렌더링
 # ------------------------------------------------------------
 def build_css():
     return """
     <style>
-      /* 전체 베이스 폰트 살짝 축소 */
-      html, body, [class*="css"]  { font-size: 15px; }
-
+      html, body { font-size: 15px; }
       .stApp {
         background: radial-gradient(1200px 800px at 25% 20%, rgba(55, 70, 180, 0.35), rgba(0,0,0,0) 55%),
                     radial-gradient(900px 650px at 85% 70%, rgba(30, 150, 255, 0.18), rgba(0,0,0,0) 60%),
                     linear-gradient(135deg, #07112a 0%, #040a1d 55%, #030817 100%);
       }
 
-      /* 타이틀 영역 크기 줄임 */
       .title-wrap {
         text-align: center;
         margin-top: 8px;
@@ -71,17 +69,6 @@ def build_css():
         color: rgba(233,238,252,0.82);
       }
 
-      /* 이미지 가운데 정렬 + 크기 줄임 */
-      .img-wrap {
-        display: flex;
-        justify-content: center;
-        margin: 6px 0 10px 0;
-      }
-      .img-wrap img {
-        border-radius: 10px;
-      }
-
-      /* 카드 전체 폭/패딩 줄임 */
       .card {
         background: rgba(0, 0, 0, 0.30);
         border: 1px solid rgba(255,255,255,0.10);
@@ -124,7 +111,6 @@ def build_css():
         font-weight: 850;
       }
 
-      /* 바(15칸) 사이즈 줄임 */
       .bar-wrap{
         display:flex;
         align-items:center;
@@ -149,7 +135,6 @@ def build_css():
       .gold { background: #ffd34a; }
       .empty { background: rgba(255,255,255,0.10); }
 
-      /* SR+ 뱃지 */
       .srplus {
         font-size: 18px;
         font-weight: 950;
@@ -160,7 +145,6 @@ def build_css():
         white-space: nowrap;
       }
 
-      /* 구분선 간격 축소 */
       .divider {
         height: 1px;
         max-width: 820px;
@@ -168,7 +152,6 @@ def build_css():
         background: rgba(255,255,255,0.16);
       }
 
-      /* 버튼 크기/패딩 줄임 */
       div.stButton > button {
         width: 100%;
         max-width: 820px;
@@ -199,20 +182,16 @@ def render_bar_html(additional: int, total_slots: int = 15) -> str:
         segs.append('<div class="seg empty"></div>')
     return f'<div class="bar">{"".join(segs)}</div>'
 
-def render_card(title: str, stat_name: str, stat_value: int, additional: int) -> str:
+def render_card_html(title: str, stat_name: str, stat_value: int, additional: int) -> str:
     denom = 8 + additional
     bar_html = render_bar_html(additional=additional, total_slots=15)
-
-    # ✅ additional=7(=총 15칸)일 때 SR+ 표시
     sr_badge = '<div class="srplus">SR+</div>' if additional == 7 else ""
-
     return f"""
       <div class="card">
         <div class="card-title">{title}</div>
         <div class="row">
           <div class="stat-label">{stat_name}</div>
           <div class="stat-value">{stat_value}<span>/{denom}</span></div>
-
           <div class="bar-wrap">
             {bar_html}
             {sr_badge}
@@ -221,20 +200,24 @@ def render_card(title: str, stat_name: str, stat_value: int, additional: int) ->
       </div>
     """
 
+def render_block(*html_parts, height=220):
+    # components.html은 독립 DOM이라 body 배경은 Streamlit 쪽을 따라가고,
+    # 카드 내부만 렌더되면 되므로 wrapper만 최소로 둠.
+    html = "".join(html_parts)
+    components.html(html, height=height, scrolling=False)
+
 # ------------------------------------------------------------
 # 3) Streamlit App
 # ------------------------------------------------------------
 st.set_page_config(page_title="각성 잠재 시뮬레이터", layout="centered")
-
 st.markdown(build_css(), unsafe_allow_html=True)
 
-# 세션 상태 (기존/변경 분리)
 if "prev_additional" not in st.session_state:
     st.session_state.prev_additional = None
 if "current_additional" not in st.session_state:
     st.session_state.current_additional = choose_slots(initial_probs)
 
-# 로컬 이미지(ponce.PNG) 로드
+# 로컬 이미지(ponce.PNG)
 player_img = None
 try:
     base_dir = Path(__file__).resolve().parent
@@ -244,7 +227,7 @@ try:
 except Exception:
     player_img = None
 
-# 타이틀
+# 타이틀 (이건 markdown+html로도 잘 먹음)
 st.markdown(
     """
     <div class="title-wrap">
@@ -259,11 +242,11 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-# ✅ 이미지 가운데 + 크기 축소(한 화면에 더 잘 들어오게)
+# 이미지 가운데 정렬 (streamlit native)
 if player_img is not None:
-    st.markdown('<div class="img-wrap">', unsafe_allow_html=True)
-    st.image(player_img, width=210)  # 기존 260 → 210
-    st.markdown('</div>', unsafe_allow_html=True)
+    c1, c2, c3 = st.columns([1, 2, 1])
+    with c2:
+        st.image(player_img, width=210)
 
 STAT_NAME = "장타 억제력"
 STAT_VALUE = 10
@@ -273,13 +256,12 @@ cur_add = st.session_state.current_additional
 if prev_add is None:
     prev_add = cur_add
 
-# 카드 2개
-st.markdown(render_card("기존 잠재력", STAT_NAME, STAT_VALUE, prev_add), unsafe_allow_html=True)
+# ✅ 카드 렌더: st.markdown 대신 components.html로 강제 렌더
+render_block(render_card_html("기존 잠재력", STAT_NAME, STAT_VALUE, prev_add), height=190)
 st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
-st.markdown(render_card("변경 잠재력", STAT_NAME, STAT_VALUE, cur_add), unsafe_allow_html=True)
+render_block(render_card_html("변경 잠재력", STAT_NAME, STAT_VALUE, cur_add), height=190)
 
-# 버튼 (확인 누르면 변경 잠재력 다시 뽑기)
-if st.button("변경"):
+if st.button("확인"):
     new_probs = adjust_probs(st.session_state.current_additional)
     st.session_state.prev_additional = st.session_state.current_additional
     st.session_state.current_additional = choose_slots(new_probs)
